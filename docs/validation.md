@@ -44,6 +44,8 @@ Two independent agents reviewed the implementation; a follow-up product review a
 9. Output-file seeking bypassing position-based limits; command bounds use actual file sizes.
 10. Failed tool-driven case changes leaving mismatched metadata; case selection commits only after success.
 
+11. A cold-start CI run exposed a dangling tab-to-panel ARIA reference; explicit relationships at the call site and a keyboard regression now cover all three panels. Expanded axe checks also corrected contrast in the reference diff and keyboard access to scrolling content.
+
 Reviewers additionally checked 2,000 random DAG/pin/nonmonotonic-outcome combinations in independent scratch scripts. Those supplementary experiments are reported as reviewer observations, not a substitute for the committed property tests.
 
 ## Performance evidence

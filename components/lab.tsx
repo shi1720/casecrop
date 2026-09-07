@@ -648,15 +648,45 @@ export default function Lab() {
               onValueChange={(v) => setTab(String(v))}
               className="result-tabs"
             >
+              {/* Explicit relationships keep SSR/client IDs stable; Base UI 1.7's
+                  panel registration does not use the supplied DOM id. */}
               <TabsList variant="line" className="result-tabs-list">
-                <TabsTrigger value="trace">The trace</TabsTrigger>
-                <TabsTrigger value="experiments">
+                <TabsTrigger
+                  id="casecrop-tab-trace"
+                  aria-controls={
+                    tab === 'trace' ? 'casecrop-panel-trace' : undefined
+                  }
+                  value="trace"
+                >
+                  The trace
+                </TabsTrigger>
+                <TabsTrigger
+                  id="casecrop-tab-experiments"
+                  aria-controls={
+                    tab === 'experiments'
+                      ? 'casecrop-panel-experiments'
+                      : undefined
+                  }
+                  value="experiments"
+                >
                   Experiments{' '}
                   <span className="tab-count">{report.trials.length}</span>
                 </TabsTrigger>
-                <TabsTrigger value="fix">The golden fix</TabsTrigger>
+                <TabsTrigger
+                  id="casecrop-tab-fix"
+                  aria-controls={
+                    tab === 'fix' ? 'casecrop-panel-fix' : undefined
+                  }
+                  value="fix"
+                >
+                  The golden fix
+                </TabsTrigger>
               </TabsList>
-              <TabsContent value="trace">
+              <TabsContent
+                id="casecrop-panel-trace"
+                aria-labelledby="casecrop-tab-trace"
+                value="trace"
+              >
                 <div className="trace-comparison">
                   <div className="trace-column original">
                     <div className="column-label">
@@ -738,7 +768,11 @@ export default function Lab() {
                   </div>
                 )}
               </TabsContent>
-              <TabsContent value="experiments">
+              <TabsContent
+                id="casecrop-panel-experiments"
+                aria-labelledby="casecrop-tab-experiments"
+                value="experiments"
+              >
                 <div className="experiments">
                   <div className="field-row">
                     <h3>Every trial, accounted for.</h3>
@@ -790,12 +824,18 @@ export default function Lab() {
                       {trial.samples.length !== 1 ? 's' : ''}
                     </p>
                     {trial.outcome.reason && <p>{trial.outcome.reason}</p>}
-                    <div className="candidate-chips">
+                    {/* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- Overflowing content must support keyboard scrolling. */}
+                    <section
+                      className="candidate-chips"
+                      aria-label="Candidate events"
+                      tabIndex={0}
+                    >
                       {trial.kept.map((id) => (
                         <span key={id}>{id}</span>
                       ))}
                       {!trial.kept.length && <span>empty trace</span>}
-                    </div>
+                    </section>
+                    {/* oxlint-enable jsx-a11y/no-noninteractive-tabindex */}
                   </div>
                   <details className="audit-details">
                     <summary>
@@ -810,7 +850,11 @@ export default function Lab() {
                   </details>
                 </div>
               </TabsContent>
-              <TabsContent value="fix">
+              <TabsContent
+                id="casecrop-panel-fix"
+                aria-labelledby="casecrop-tab-fix"
+                value="fix"
+              >
                 <div className="golden-fix">
                   <span className="eyebrow">
                     <ShieldCheck size={14} />
@@ -824,10 +868,16 @@ export default function Lab() {
                       : 'The corrected control needs attention.'}
                   </h3>
                   <p>{c.reason}</p>
-                  <div className="code-diff">
+                  {/* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- Overflowing content must support keyboard scrolling. */}
+                  <section
+                    className="code-diff"
+                    aria-label="Reference code changes"
+                    tabIndex={0}
+                  >
                     <pre className="deleted">− {c.before}</pre>
                     <pre className="added">+ {c.after}</pre>
-                  </div>
+                  </section>
+                  {/* oxlint-enable jsx-a11y/no-noninteractive-tabindex */}
                   <div className="control-row">
                     <span>Buggy implementation</span>
                     <span className="verdict fail">{report.signature}</span>

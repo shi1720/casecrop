@@ -127,15 +127,31 @@ test('keyboard operation, no overflow, and accessible lab and docs', async ({
   await page.keyboard.press('ArrowDown');
   await expect(page.getByRole('listbox')).toBeVisible();
   await page.keyboard.press('Escape');
-  const analysis = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
-    .analyze();
-  expect(
-    analysis.violations.map((v) => ({
-      id: v.id,
-      nodes: v.nodes.map((n) => n.target),
-    })),
-  ).toEqual([]);
+  await expect(page.getByRole('listbox')).toBeHidden();
+  // Exercise relationships after hydration and after a keyboard tab change.
+  for (const name of ['The trace', /Experiments/, 'The golden fix']) {
+    const trigger = page.getByRole('tab', { name, exact: true });
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(trigger).toHaveAttribute('aria-selected', 'true');
+    const panelId = await trigger.getAttribute('aria-controls');
+    const tabId = await trigger.getAttribute('id');
+    if (!panelId || !tabId) throw new Error('Tab must name its panel');
+    await expect(page.locator(`[id="${panelId}"]`)).toBeVisible();
+    await expect(page.locator(`[id="${panelId}"]`)).toHaveAttribute(
+      'aria-labelledby',
+      tabId,
+    );
+    const analysis = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze();
+    expect(
+      analysis.violations.map((v) => ({
+        id: v.id,
+        nodes: v.nodes.map((n) => n.target),
+      })),
+    ).toEqual([]);
+  }
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

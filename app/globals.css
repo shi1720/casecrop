@@ -920,7 +920,7 @@ h1 span {
 }
 .golden-fix > p {
   font-size: 14px;
-  color: #6f7b62;
+  color: #52603e;
   line-height: 1.7;
   max-width: 580px;
 }
@@ -935,11 +935,11 @@ h1 span {
 }
 .deleted {
   background: #fff1ed;
-  color: #b75436;
+  color: #91391f;
 }
 .added {
   background: #eef6e6;
-  color: #527b34;
+  color: #365222;
 }
 .control-row {
   display: flex;

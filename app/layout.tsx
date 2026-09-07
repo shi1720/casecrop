@@ -14,13 +14,13 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://casecrop-shi1720.sg127977958.chatgpt.site'),
-  title: 'CaseCrop — Less trace. Same bug.',
+  title: 'CaseCrop — Reproducible trace reduction',
   description:
     'Shrink recorded executions into small, dependency-valid regression cases. A zero-dependency Python library with a live failure minimization lab.',
   openGraph: {
-    title: 'CaseCrop — Less trace. Same bug.',
+    title: 'CaseCrop — Reproducible trace reduction',
     description:
-      'A wall of events. One reproducible bug. Try the Python failure minimization lab.',
+      'Reduce recorded executions while preserving the target failure. Explore three replay systems, inspect trials, and export a regression case.',
     type: 'website',
   },
   icons: { icon: '/icon.svg' },

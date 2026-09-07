@@ -160,7 +160,10 @@ class _Run:
         current = self.trace.events
         baseline = self.test(current, "baseline", fresh=True)
         if baseline.verdict != "fail":
-            raise BaselineError("baseline does not consistently reproduce the target failure")
+            detail = f": {baseline.reason}" if baseline.reason else f" ({baseline.verdict})"
+            raise BaselineError(
+                "baseline does not consistently reproduce the target failure" + detail
+            )
         self.target = baseline.signature
         witnesses: list[Witness] = []
         status, minimal, confirmed = "budget_exhausted", False, False

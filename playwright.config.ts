@@ -1,4 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
+const production = process.env.CASECROP_TEST_PRODUCTION === '1';
+const localURL = production ? 'http://localhost:3001' : 'http://localhost:3000';
 export default defineConfig({
   testDir: './tests-web',
   fullyParallel: false,
@@ -6,7 +8,7 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 15_000 },
   use: {
-    baseURL: process.env.TEST_URL || 'http://localhost:3000',
+    baseURL: process.env.TEST_URL || localURL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
@@ -26,9 +28,9 @@ export default defineConfig({
   webServer: process.env.TEST_URL
     ? undefined
     : {
-        command: 'npm run dev',
-        url: 'http://localhost:3000',
-        reuseExistingServer: !process.env.CI,
+        command: production ? 'npm run start -- --port 3001' : 'npm run dev',
+        url: localURL,
+        reuseExistingServer: !process.env.CI && !production,
         timeout: 120_000,
       },
 });

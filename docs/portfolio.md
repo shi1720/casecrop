@@ -6,12 +6,12 @@
 
 ## A two-minute demo
 
-1. Open the [lab](https://casecrop-shi1720.sg127977958.chatgpt.site). The initial result is explicitly labeled as a previously executed example.
-2. Pick **Cross-tenant cache leak**, then **Crop this case**. Actual Python runs locally, shrinking 36 events to 6.
+1. Open the [workbench](https://casecrop-shi1720.sg127977958.chatgpt.site). The initial result is explicitly labeled as a previously executed example.
+2. Pick **Cross-tenant cache leak**, then **Run reduction**. Actual Python runs locally, shrinking 36 events to 6.
 3. Inspect `store-a` and its prerequisite. The reducer preserved setup instead of turning a missing tenant into a false success.
-4. Open **Experiments**. Every candidate, verdict, cached result, and final deletion witness is inspectable.
-5. Open **The golden fix**. The buggy shared cache fails; the key including both tenant and resource passes with the same reduced input.
-6. Export the trace and evidence. Run `casecrop demo --output incident --require-minimal`, then `python -m pytest incident/test_regression.py`.
+4. Open **Replay log**. Every candidate, verdict, cached result, and final deletion witness is inspectable.
+5. Open **Reference fix**. The buggy shared cache fails; the key including both tenant and resource passes with the same reduced input.
+6. Download the trace and report. Run `casecrop demo --output incident --require-minimal`, then `python -m pytest incident/test_regression.py`.
 7. Set a tight budget and rerun. Incomplete verification is visibly reported; the tool does not manufacture a success badge.
 
 ## Relevance to the supplied software engineering role

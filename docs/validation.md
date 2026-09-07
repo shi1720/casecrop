@@ -1,10 +1,10 @@
 # Validation and review
 
-Release candidate: v0.1.0, 2026-09-07. These are reproducible checks and observed results, not certification of every environment or production deployment history.
+Release: v0.1.1, 2026-09-07. This document records reproducible checks and review findings. It does not imply production adoption or coverage of every execution environment.
 
 ## Python
 
-The local Python 3.12.14 suite passes **164 tests**, with **96% statement coverage** over `src/casecrop`. Coverage is measured with coverage.py; CI enforces at least 95%. The repository CI matrix targets Python 3.10, 3.11, 3.12, 3.13, and 3.14. Check the GitHub Actions run for the current matrix status rather than inferring support solely from this document.
+The local Python 3.12.14 suite passes **168 tests**, with **96% statement coverage** over `src/casecrop`. Coverage is measured with coverage.py; CI enforces at least 95%. The repository CI matrix targets Python 3.10, 3.11, 3.12, 3.13, and 3.14. Check the GitHub Actions run for the current matrix status rather than inferring support solely from this document.
 
 Coverage includes:
 
@@ -23,11 +23,11 @@ The external cart regression also passes. The package builds as a source distrib
 
 `scripts/test-engine.mjs` loads the pinned Pyodide package and exact Python bundle, then compares each complete report to the native Python output. All three example reports match field for field. Budget exhaustion and invalid-input paths also execute in WebAssembly.
 
-There are **14 browser cases**: seven workflows on desktop Chromium and a mobile Chromium viewport. They cover actual Python execution, both export paths used by the UI, event inspection, experiment navigation, corrected controls, alternate systems, budget exhaustion, invalid-input recovery, raw duplicate JSON keys, cancellation/retry, keyboard controls, docs navigation, and horizontal overflow. Automated axe checks find no tested WCAG A/AA violations on the lab and documentation pages. This is automated coverage, not a complete manual accessibility audit. Mobile Chromium viewport testing does not claim native Safari coverage.
+There are **24 browser cases**: twelve workflows on desktop Chromium and a mobile Chromium viewport. They cover actual Python execution, both export paths used by the UI, event inspection, experiment navigation, corrected controls, alternate systems, budget exhaustion, invalid-input recovery, raw duplicate JSON keys, cancellation/retry, keyboard controls, docs navigation, horizontal overflow, pending-setting provenance, final-replay and reference-control verdicts, immediate agent-tool readback, 320px reflow, and enlarged text. Event inspection is checked for focus and viewport visibility. Invalid-input recovery verifies that the existing Python runtime is reused. Automated axe checks find no tested WCAG A/AA violations on the lab and documentation pages. This is automated coverage, not a complete manual accessibility audit. Mobile Chromium viewport testing does not claim native Safari coverage.
 
 Real WebMCP validation in the in-app browser confirmed both registered tools, a valid reduction updating the visible lab and readback, and rejection of invalid case/noise input. Browsers without this optional API retain all normal UI functionality.
 
-The production website build succeeds. `npm audit` reports zero known vulnerabilities for the installed dependency graph at validation time. Generated component sources are excluded from project-specific lint, but remain typechecked and exercised in browser accessibility tests.
+The production website build succeeds. The same browser workflows run against the built Worker using `CASECROP_TEST_PRODUCTION=1`. CI also exercises actual Python execution and keyboard/accessibility behavior against that build, after the development suite. `npm audit` reports zero known vulnerabilities for the installed dependency graph at validation time. Generated component sources are excluded from project-specific lint, but remain typechecked and exercised in browser accessibility tests.
 
 ## Independent review and iterations
 
@@ -43,10 +43,24 @@ Two independent agents reviewed the implementation; a follow-up product review a
 8. Unresolved corrected controls receiving success styling; verification text and styling now follow the actual outcome.
 9. Output-file seeking bypassing position-based limits; command bounds use actual file sizes.
 10. Failed tool-driven case changes leaving mismatched metadata; case selection commits only after success.
-
 11. A cold-start CI run exposed a dangling tab-to-panel ARIA reference; explicit relationships at the call site and a keyboard regression now cover all three panels. Expanded axe checks also corrected contrast in the reference diff and keyboard access to scrolling content.
 
 Reviewers additionally checked 2,000 random DAG/pin/nonmonotonic-outcome combinations in independent scratch scripts. Those supplementary experiments are reported as reviewer observations, not a substitute for the committed property tests.
+
+## v0.1.1 product and reliability review
+
+Separate LLM judges reviewed the workbench and release behavior, followed by targeted rechecks. Their findings drove these changes:
+
+- Replaced the large promotional introduction and repeated claims with a compact workbench, plain labels, stable event IDs, and payload summaries. Rewrote the README and aligned documentation and CLI terminology.
+- Added result provenance and an unapplied-settings notice. Downloads remain associated with the displayed report while another run is pending.
+- Made incomplete audits, failed final replays, and failing or unresolved reference controls visibly distinct. Corrected minimality wording to include protected prerequisite ancestry.
+- Made event inspection focus and reveal its details, with focus restoration on close. Added previous/next trial navigation and explained chart height.
+- Fixed Unicode exports that could exceed the browser limit on reimport. Tests cover a 22,000-emoji payload, normalized schema expansion, and invalid surrogate characters.
+- Preserved the loaded Python runtime after input errors and included the underlying replay reason in baseline errors.
+- Fixed agent-tool readback returning the previous report immediately after a successful run. The completion path updates the readback snapshot synchronously; a browser regression checks run and read in one call.
+- Corrected low-contrast labels identified by the expanded accessibility checks.
+
+The product judge's second assessment improved from 3/5 to 4/5 for visual character, 2/5 to 4/5 for clarity, and 2/5 to 4/5 for information density. These are subjective review scores, not benchmarks or certification. The final targeted product review rated all five criteria 4/5 and confirmed the original blockers were resolved. A minor repeated-selection focus issue from that pass was also fixed and added to the browser regression. The review did not prompt a change to the reducer's underlying algorithm.
 
 ## Performance evidence
 

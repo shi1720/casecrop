@@ -23,7 +23,7 @@ def _write(result: Result, output: Path, case: str | None = None) -> None:
     result.reduced.save(output / "reduced.json")
     if case is not None:
         (output / "test_regression.py").write_text(
-            '"""Executable minimized regression: buggy control fails; golden fix passes."""\n'
+            '"""Regression: the buggy control fails and the reference fix passes."""\n'
             "from pathlib import Path\nfrom casecrop import Trace\n"
             "from casecrop.examples import replay\n\n"
             'TRACE = Trace.load(Path(__file__).with_name("reduced.json"))\n\n'
@@ -37,11 +37,13 @@ def _write(result: Result, output: Path, case: str | None = None) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="casecrop", description="Less trace. Same bug.")
+    parser = argparse.ArgumentParser(
+        prog="casecrop", description="Reduce a failing execution to a smaller regression case."
+    )
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
     demonstration = commands.add_parser(
-        "demo", help="reduce a real stateful bug and its golden fix"
+        "demo", help="reduce a bundled failure and check its reference fix"
     )
     demonstration.add_argument("--case", choices=list(CASES), default="cache")
     demonstration.add_argument("--noise", type=int, default=30)

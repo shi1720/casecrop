@@ -85,3 +85,7 @@ flowchart LR
 ```
 
 The hosted Worker serves the website and assets. It never runs user replay code. Browser requests accept only the three bundled systems; custom JSON changes event data for those systems. Input is not sent to an application backend, stored, or used for analytics. The initial result is visibly labeled as a previously executed example; pressing the run button invokes Python locally. Terminating the Web Worker cancels browser computation.
+
+Reports remain associated with the inputs that produced them. Changing settings marks the displayed result as previous evidence until the next run succeeds; exports always use that displayed report. Saved examples and completed browser runs have separate labels. Agent-tool readback is updated before a successful run resolves.
+
+Browser JSON must fit within 256,000 bytes both as raw text and normalized UTF-8, with at most 200 events and JavaScript-safe integers. Exports preserve valid Unicode. Invalid input does not discard the loaded runtime; initialization failures permit a retry. The production-worker smoke test exercises the built site as well as development mode.

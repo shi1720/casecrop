@@ -46,12 +46,12 @@ export default function Docs() {
           <span className="brand-mark">
             <Crop size={23} />
           </span>
-          casecrop<span className="version">v0.1</span>
+          casecrop
         </Link>
         <nav aria-label="Main navigation">
           <Link href="/">
             <ArrowLeft size={14} />
-            Back to the lab
+            Workbench
           </Link>
           <a
             href="https://github.com/shi1720/casecrop"
@@ -89,25 +89,21 @@ export default function Docs() {
           </Link>
         </aside>
         <article className="docs-body">
-          <p className="eyebrow">A SMALLER PATH TO REPRODUCIBLE BUGS</p>
-          <h1>
-            Make the failure
-            <br />
-            <span>fit in your head.</span>
-          </h1>
+          <p className="eyebrow">CaseCrop documentation</p>
+          <h1>Reduce a failing execution.</h1>
           <p className="docs-lead">
             CaseCrop starts with an execution that already fails. It deletes
             events, replays what remains, and keeps a smaller case only when the
-            same bug survives.
+            same failure is reproduced.
           </p>
           <section id="quickstart">
-            <h2>01 / Up and running</h2>
+            <h2>Install and run</h2>
             <p>
-              Python 3.10 or newer. No runtime dependencies, model, account, or
-              API key. The beta release is installed from tagged source; it is
-              not published on PyPI.
+              Python 3.10 or newer. The package has no runtime dependencies.
+              Install the beta from its tagged GitHub release; PyPI distribution
+              is not available yet.
             </p>
-            <Code>{`pip install "casecrop @ git+https://github.com/shi1720/casecrop.git@v0.1.0"
+            <Code>{`pip install "casecrop @ git+https://github.com/shi1720/casecrop.git@v0.1.1"
 casecrop demo --case cache --require-minimal`}</Code>
             <p>
               The smallest API example below uses a teaching oracle. The bundled
@@ -117,7 +113,7 @@ casecrop demo --case cache --require-minimal`}</Code>
             <Code>{quickstart}</Code>
           </section>
           <section id="real-example">
-            <h2>02 / Connect your application</h2>
+            <h2>Connect your application</h2>
             <p>
               Your application owns replay. Start from a clean in-memory object,
               test database, container, or disposable fixture on every call. Map
@@ -147,7 +143,7 @@ casecrop reduce examples/cart_trace.json \\
             </a>
           </section>
           <section id="traces">
-            <h2>03 / Describe a trace</h2>
+            <h2>Trace format</h2>
             <p>
               A trace is an ordered list of uniquely named events. Payloads are
               finite JSON values. Access returns a detached copy so accidental
@@ -221,7 +217,7 @@ casecrop reduce examples/cart_trace.json \\
             </p>
           </section>
           <section id="oracle">
-            <h2>04 / Return evidence, not guesses</h2>
+            <h2>Replay outcomes</h2>
             <Code>{`Outcome.fail("cache.cross_tenant")  # The target behavior occurred.
 Outcome.pass_()                     # Valid execution; target is absent.
 Outcome.unresolved("fixture down")  # Cannot reach a trustworthy verdict.`}</Code>
@@ -241,7 +237,7 @@ Outcome.unresolved("fixture down")  # Cannot reach a trustworthy verdict.`}</Cod
             </p>
           </section>
           <section id="guarantees">
-            <h2>05 / Read the result honestly</h2>
+            <h2>Result status and guarantees</h2>
             <div className="docs-callout">
               <GitBranch size={21} />
               <p>
@@ -313,7 +309,7 @@ Outcome.unresolved("fixture down")  # Cannot reach a trustworthy verdict.`}</Cod
             </p>
           </section>
           <section id="cli">
-            <h2>06 / Any language. One JSON protocol.</h2>
+            <h2>Command-line replay protocol</h2>
             <p>
               The command adapter runs an explicit argument vector. Put a{' '}
               <code>{'{trace}'}</code> placeholder wherever your program expects
@@ -344,7 +340,7 @@ Outcome.unresolved("fixture down")  # Cannot reach a trustworthy verdict.`}</Cod
             </p>
           </section>
           <section id="architecture">
-            <h2>07 / A small, inspectable boundary</h2>
+            <h2>System architecture</h2>
             <div className="architecture-flow">
               <span>
                 Recorded events
@@ -379,7 +375,7 @@ Outcome.unresolved("fixture down")  # Cannot reach a trustworthy verdict.`}</Cod
             </a>
           </section>
           <section id="limits">
-            <h2>08 / Scope and prior work</h2>
+            <h2>Limits and prior work</h2>
             <p>
               Use isolated replay fixtures. The Python callback is trusted code,
               and the command adapter is not a sandbox. It inherits your
@@ -392,8 +388,10 @@ Outcome.unresolved("fixture down")  # Cannot reach a trustworthy verdict.`}</Cod
               redaction: sanitize before capture or sharing. The lab keeps input
               in the browser and runs only its three bundled replay systems. Use
               Python or the CLI for your own oracle. Browser inputs are limited
-              to 200 events and 256 KB; the library accepts up to 10,000 events
-              and 8 MB of canonical JSON.
+              to 200 events and 256 KB of raw and normalized UTF-8 JSON. Invalid
+              Unicode and integers outside JavaScript’s safe range are rejected.
+              The library accepts up to 10,000 events and 8 MB of canonical
+              JSON.
             </p>
             <p>
               CaseCrop builds on{' '}
@@ -413,7 +411,7 @@ Outcome.unresolved("fixture down")  # Cannot reach a trustworthy verdict.`}</Cod
             </p>
           </section>
           <Link className="docs-link" href="/">
-            Try another case in the lab <ArrowRight size={16} />
+            Open the workbench <ArrowRight size={16} />
           </Link>
         </article>
       </div>

@@ -13,6 +13,7 @@ import {
   ArrowUpRight,
   Check,
   CheckCheck,
+  ChevronLeft,
   ChevronRight,
   Code2,
   Copy,
@@ -22,7 +23,6 @@ import {
   GitBranch,
   LockKeyhole,
   RotateCcw,
-  Scissors,
   ShieldCheck,
   Terminal,
   X,
@@ -57,7 +57,7 @@ const cases = {
     title: 'Lost update in a counter',
     file: 'shared_counter.py',
     description:
-      'Two workers read zero. Both write one. An increment quietly disappears.',
+      'Two workers write from stale snapshots, losing one increment.',
     tag: 'Concurrency',
     before: 'counter = snapshot[worker] + 1',
     after: 'counter = counter + 1  # atomic in this model',
@@ -67,8 +67,7 @@ const cases = {
   permission: {
     title: 'Stale permission cache',
     file: 'permission_cache.py',
-    description:
-      'Access is revoked. A cached allow decision keeps opening the door.',
+    description: 'A cached permission remains valid after access is revoked.',
     tag: 'Authorization',
     before: 'grants[user] = allowed',
     after: 'grants[user] = allowed\ncache.pop(user, None)',
@@ -77,8 +76,8 @@ const cases = {
   },
 };
 const install =
-  'pip install "casecrop @ git+https://github.com/shi1720/casecrop.git@v0.1.0"';
-const snippet = `from casecrop import minimize\n\n# Your replay function. Your bug.\nresult = minimize(\n    trace,\n    replay,\n    max_calls=500,\n)\n\nresult.reduced.save("regression.json")\nassert result.one_minimal`;
+  'pip install "casecrop @ git+https://github.com/shi1720/casecrop.git@v0.1.1"';
+const snippet = `from casecrop import minimize\n\n# replay must reset state before each execution.\nresult = minimize(\n    trace,\n    replay,\n    max_calls=500,\n)\n\nresult.reduced.save("regression.json")\nassert result.one_minimal`;
 function download(name: string, value: unknown) {
   const url = URL.createObjectURL(
     new Blob(
@@ -101,8 +100,26 @@ function eventPayload(e: Event): Record<string, unknown> {
 }
 function eventLabel(e: Event) {
   const p = eventPayload(e);
-  const detail = p.tenant ?? p.worker ?? p.user ?? p.metric;
-  return `${typeof p.op === 'string' ? p.op : 'event'}${detail !== undefined ? ` · ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''}`;
+  const scalar = (v: unknown) =>
+    typeof v === 'string' ? v : JSON.stringify(v);
+  const parts = [
+    p.op ?? 'event',
+    p.tenant ?? p.worker ?? p.user ?? p.metric,
+    p.key,
+  ]
+    .filter((v) => v !== undefined)
+    .map(scalar);
+  if (p.value !== undefined) parts.push(`value=${scalar(p.value)}`);
+  return parts.join(' · ');
+}
+function resultStatus(report: Report) {
+  if (report.status === 'unstable')
+    return 'Final replay did not reproduce the failure';
+  if (report.status === 'budget_exhausted')
+    return 'Replay budget reached; verification incomplete';
+  if (report.status === 'unresolved')
+    return 'Failure reproduced; some deletion checks are unresolved';
+  return 'Failure reproduced and deletion audit complete';
 }
 function EventRows({
   events,
@@ -114,7 +131,7 @@ function EventRows({
   events: Event[];
   kept?: Set<string>;
   selected: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, source: HTMLButtonElement) => void;
   compact?: boolean;
 }) {
   return (
@@ -123,24 +140,20 @@ function EventRows({
         <button
           key={e.id}
           className={`event-row ${kept?.has(e.id) ? 'survives' : ''} ${selected === e.id ? 'selected' : ''}`}
-          onClick={() => onSelect(e.id)}
+          onClick={(event) => onSelect(e.id, event.currentTarget)}
           aria-label={`Inspect ${e.id}`}
           aria-pressed={selected === e.id}
         >
           <span className="event-number">{String(i + 1).padStart(2, '0')}</span>
-          <span
-            className={`event-glyph ${eventPayload(e).op === 'observe' ? 'muted-glyph' : ''}`}
-          >
-            {eventPayload(e).op === 'observe' ? '·' : '↳'}
-          </span>
-          <span className="event-name">{eventLabel(e)}</span>
-          {e.pinned ? (
-            <LockKeyhole size={13} />
-          ) : kept?.has(e.id) ? (
-            <span className="kept-dot" />
-          ) : (
+          <span className="event-content">
             <span className="event-id">{e.id}</span>
-          )}
+            <span className="event-name">{eventLabel(e)}</span>
+          </span>
+          {e.pinned ? (
+            <LockKeyhole size={13} aria-label="Pinned" />
+          ) : kept?.has(e.id) ? (
+            <span className="kept-dot" title="Retained" />
+          ) : null}
         </button>
       ))}
       {!events.length && (
@@ -167,6 +180,12 @@ export default function Lab() {
     [hasRun, setHasRun] = useState(false),
     [error, setError] = useState(''),
     [toast, setToast] = useState('');
+  const [reportInput, setReportInput] = useState<RunInput>({
+    case: 'cache',
+    noise: 30,
+    max_calls: 500,
+    repeats: 1,
+  });
   const [selected, setSelected] = useState<string | null>(null),
     [trialIndex, setTrialIndex] = useState(0);
   const [custom, setCustom] = useState(false),
@@ -176,15 +195,48 @@ export default function Lab() {
     active = useRef(false),
     mounted = useRef(true),
     reportRef = useRef(report);
-  useEffect(() => {
-    reportRef.current = report;
-  }, [report]);
   const c = cases[caseId],
     kept = new Set(report.reduced.events.map((e) => e.id));
   const removed = report.original.events.length - report.reduced.events.length;
-  const percent = report.original.events.length
-    ? Math.round((removed / report.original.events.length) * 100)
-    : 0;
+  const draftInput: RunInput = {
+    case: caseId,
+    noise,
+    max_calls: Number(budget),
+    repeats: Number(repeats),
+    ...(custom ? { trace_json: json } : {}),
+  };
+  const settingsChanged =
+    JSON.stringify(draftInput) !== JSON.stringify(reportInput);
+  const provenanceRef = useRef({ reportInput, hasRun, settingsChanged });
+  useEffect(() => {
+    reportRef.current = report;
+    provenanceRef.current = { reportInput, hasRun, settingsChanged };
+  }, [report, reportInput, hasRun, settingsChanged]);
+  const inspectorRef = useRef<HTMLElement | null>(null);
+  const inspectedButton = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (selected && tab === 'trace') {
+      inspectorRef.current?.focus({ preventScroll: true });
+      inspectorRef.current?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [selected, tab]);
+  function inspectEvent(id: string, source: HTMLButtonElement) {
+    inspectedButton.current = source;
+    if (selected === id) {
+      inspectorRef.current?.focus({ preventScroll: true });
+      inspectorRef.current?.scrollIntoView({ block: 'nearest' });
+    } else {
+      setSelected(id);
+    }
+  }
+  function closeInspector() {
+    setSelected(null);
+    inspectedButton.current?.focus();
+  }
+  const finalReplay = [...report.trials]
+    .reverse()
+    .find((t) => t.phase === 'confirm');
+  const resultCase = cases[reportInput.case];
   const selectedEvent = report.original.events.find((e) => e.id === selected);
   const trial = report.trials[Math.min(trialIndex, report.trials.length - 1)];
   useEffect(() => {
@@ -208,7 +260,15 @@ export default function Lab() {
     try {
       const r = await engine.current.run(input);
       if (mounted.current) {
+        // Tool completion must make readback current before React commits.
+        reportRef.current = r;
+        provenanceRef.current = {
+          reportInput: { ...input },
+          hasRun: true,
+          settingsChanged: false,
+        };
         setReport(r);
+        setReportInput({ ...input });
         setHasRun(true);
         setSelected(null);
         setTrialIndex(0);
@@ -244,7 +304,8 @@ export default function Lab() {
     const tools = [
       {
         name: 'get_casecrop_result',
-        description: 'Read the current reduction summary.',
+        description:
+          'Read the displayed reduction, its provenance, and whether settings have changed.',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -253,7 +314,15 @@ export default function Lab() {
         annotations: { readOnlyHint: true, untrustedContentHint: true },
         execute: () => {
           const r = reportRef.current;
+          const provenance = provenanceRef.current;
           return {
+            source: provenance.hasRun ? 'browser_run' : 'saved_example',
+            case: provenance.reportInput.case,
+            max_calls: provenance.reportInput.max_calls,
+            repeats: provenance.reportInput.repeats,
+            custom_trace: provenance.reportInput.trace_json !== undefined,
+            pending_settings: provenance.settingsChanged,
+            running: active.current,
             status: r.status,
             before: r.original.events.length,
             after: r.reduced.events.length,
@@ -351,6 +420,7 @@ export default function Lab() {
     const id = value as CaseId;
     setCaseId(id);
     setReport(examples[id] as Report);
+    setReportInput({ case: id, noise: 30, max_calls: 500, repeats: 1 });
     setHasRun(false);
     setSelected(null);
     setTrialIndex(0);
@@ -370,18 +440,18 @@ export default function Lab() {
   return (
     <div className="site-shell" data-hydrated={hydrated}>
       <Link className="skip-link" href="#lab">
-        Skip to the lab
+        Skip to the workbench
       </Link>
       <header className="site-header">
         <Link href="/" className="brand" aria-label="CaseCrop home">
           <span className="brand-mark">
             <Crop size={23} strokeWidth={2.3} />
           </span>
-          casecrop<span className="version">v0.1</span>
+          casecrop
         </Link>
         <nav aria-label="Main navigation">
           <Link className="nav-active" href="/">
-            The lab
+            Workbench
           </Link>
           <Link href="/docs">
             Documentation <ArrowUpRight size={14} />
@@ -400,34 +470,21 @@ export default function Lab() {
       <main id="lab">
         <section className="intro">
           <div>
-            <p className="eyebrow">
-              <span className="orange-square" />
-              THE FAILURE MINIMIZATION LAB
-            </p>
-            <h1>
-              Less trace. <span>Same bug.</span>
-            </h1>
+            <p className="eyebrow">CaseCrop / Interactive examples</p>
+            <h1>Find a smaller failing trace.</h1>
             <p className="intro-copy">
-              Turn a wall of events into a bug you can actually fix.
+              Replay fewer events while preserving the failure and the setup it
+              needs.
             </p>
           </div>
-          <div className="intro-note">
-            <GitBranch size={18} />
-            <span>
-              Dependency-aware reduction.
-              <br />
-              Real Python. Right in your browser.
-            </span>
-          </div>
+          <Link href="/docs#real-example" className="docs-link">
+            Use your own application <ArrowUpRight size={15} />
+          </Link>
         </section>
         <div className="workbench">
-          <aside className="config-panel">
-            <div className="section-heading">
-              <FlaskConical size={17} />
-              <h2>Set up an experiment</h2>
-            </div>
+          <aside className="config-panel" aria-label="Reduction setup">
             <span className="field-label" id="case-label">
-              01 / PICK YOUR BUG
+              Replay system
             </span>
             <Select
               value={caseId}
@@ -453,31 +510,14 @@ export default function Lab() {
               </SelectContent>
             </Select>
             <p className="case-description">{c.description}</p>
-            <span className="case-tag">{c.tag}</span>
-            <Button
-              className="run-button"
-              onClick={start}
-              disabled={busy || !hydrated}
-            >
-              <Scissors size={18} />
-              {busy ? 'Running Python…' : 'Crop this case'}
-              <ArrowRight size={17} />
-            </Button>
-            {busy && (
-              <Button
-                className="cancel-button"
-                variant="ghost"
-                onClick={() => engine.current?.cancel()}
-              >
-                <X size={14} />
-                Cancel run
-              </Button>
-            )}
-
+            <p className="scope-note">
+              Three bundled systems. To reduce traces from your application, use
+              the <Link href="/docs#real-example">Python library</Link>.
+            </p>
             <div className="config-divider" />
             <div className="field-row">
               <span className="field-label" id="noise-label">
-                02 / ADD THE NOISE
+                Unrelated events
               </span>
               <span className="mono">{noise}</span>
             </div>
@@ -491,63 +531,93 @@ export default function Lab() {
               onValueChange={(v) => setNoise(Array.isArray(v) ? v[0] : v)}
               className="noise-slider"
             />
-            <p className="field-hint">
-              Unrelated observations mixed into the trace.
-            </p>
             <div className="config-divider" />
-            <span className="field-label" id="budget-label">
-              03 / CALL BUDGET
-            </span>
-            <Select
-              value={budget}
-              onValueChange={(v) => v && setBudget(v)}
+            <details className="run-options">
+              <summary>
+                Run limits{' '}
+                <span>
+                  {budget} replays · {repeats} per candidate
+                </span>
+              </summary>
+              <div className="run-options-fields">
+                <span className="field-label" id="budget-label">
+                  Replay budget
+                </span>
+                <Select
+                  value={budget}
+                  onValueChange={(v) => v && setBudget(v)}
+                  disabled={busy || !hydrated}
+                  items={[
+                    { value: '20', label: '20 replays' },
+                    { value: '100', label: '100 replays' },
+                    { value: '500', label: '500 replays' },
+                    { value: '2000', label: '2,000 replays' },
+                  ]}
+                >
+                  <SelectTrigger
+                    aria-labelledby="budget-label"
+                    className="budget-select"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="20">20 replays</SelectItem>
+                    <SelectItem value="100">100 replays</SelectItem>
+                    <SelectItem value="500">500 replays</SelectItem>
+                    <SelectItem value="2000">2,000 replays</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="field-label repeat-label" id="repeat-label">
+                  Replays per candidate
+                </span>
+                <Select
+                  value={repeats}
+                  onValueChange={(v) => v && setRepeats(v)}
+                  disabled={busy || !hydrated}
+                  items={[
+                    { value: '1', label: '1 replay' },
+                    { value: '3', label: '3 replays' },
+                  ]}
+                >
+                  <SelectTrigger
+                    aria-labelledby="repeat-label"
+                    className="budget-select"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 replay</SelectItem>
+                    <SelectItem value="3">3 replays</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="field-hint">
+                  The budget includes the initial replay, repeated trials,
+                  deletion audit, and final confirmation.
+                </p>
+              </div>
+            </details>
+            <Button
+              className="run-button"
+              onClick={start}
               disabled={busy || !hydrated}
-              items={[
-                { value: '20', label: '20 · a tight budget' },
-                { value: '100', label: '100 calls' },
-                { value: '500', label: '500 calls' },
-                { value: '2000', label: '2,000 calls' },
-              ]}
             >
-              <SelectTrigger
-                aria-labelledby="budget-label"
-                className="budget-select"
+              <ArrowRight size={16} />
+              {busy ? 'Running reduction…' : 'Run reduction'}
+            </Button>
+            {busy && (
+              <Button
+                className="cancel-button"
+                variant="ghost"
+                onClick={() => engine.current?.cancel()}
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="20">20 · a tight budget</SelectItem>
-                <SelectItem value="100">100 calls</SelectItem>
-                <SelectItem value="500">500 calls</SelectItem>
-                <SelectItem value="2000">2,000 calls</SelectItem>
-              </SelectContent>
-            </Select>
-            <span className="field-label repeat-label" id="repeat-label">
-              REPLAYS PER CANDIDATE
-            </span>
-            <Select
-              value={repeats}
-              onValueChange={(v) => v && setRepeats(v)}
-              disabled={busy || !hydrated}
-              items={[
-                { value: '1', label: '1 replay' },
-                { value: '3', label: '3 replays · consistency check' },
-              ]}
-            >
-              <SelectTrigger
-                aria-labelledby="repeat-label"
-                className="budget-select"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1 replay</SelectItem>
-                <SelectItem value="3">3 replays · consistency check</SelectItem>
-              </SelectContent>
-            </Select>
+                <X size={14} />
+                Cancel run
+              </Button>
+            )}
+
             <p className="privacy-note">
               <LockKeyhole size={12} />
-              Your trace stays in this browser.
+              Runs locally in this browser.
             </p>
             <button
               className="text-action custom-toggle"
@@ -558,32 +628,43 @@ export default function Lab() {
               }}
             >
               {custom ? <RotateCcw size={14} /> : <FileJson size={14} />}
-              {custom ? 'Use generated trace' : 'Edit the trace JSON'}
+              {custom ? 'Use generated trace' : 'Edit example JSON'}
               <ChevronRight size={14} />
             </button>
-            <div className="config-bottom">
-              <span className="tiny-label">THE RULE</span>
-              <p>
-                Smaller only counts if
-                <br />
-                <strong>the same bug survives.</strong>
-              </p>
-            </div>
           </aside>
           <section className="results-panel" aria-label="Reduction results">
             <div className="result-topbar">
               <span className="file-name">
                 <span className="python-dot" />
-                {c.file}
+                {resultCase.file}
               </span>
               <span className="run-state" aria-live="polite">
                 {busy
-                  ? 'Executing locally…'
+                  ? 'Running · previous result below'
                   : hasRun
-                    ? 'Executed in your browser'
-                    : 'Previously executed example'}
+                    ? 'Completed in this browser'
+                    : 'Saved example result'}
               </span>
             </div>
+            <div className="report-provenance">
+              <span>
+                {reportInput.trace_json !== undefined
+                  ? 'Edited trace'
+                  : `${reportInput.noise} unrelated events`}{' '}
+                · budget {report.config.max_calls} · {report.config.repeats}{' '}
+                replay{report.config.repeats === 1 ? '' : 's'} per candidate
+              </span>
+              <span title={report.input_digest}>
+                Input {report.input_digest.slice(0, 10)}
+              </span>
+            </div>
+            {(settingsChanged || busy) && (
+              <output className="pending-notice">
+                {busy
+                  ? 'A new reduction is running. The results and downloads below belong to the previous run.'
+                  : 'Settings changed. Run reduction to update the results. Downloads still contain the displayed result.'}
+              </output>
+            )}
             {error && (
               <div className="error-banner" role="alert">
                 <span>{error}</span>
@@ -594,12 +675,11 @@ export default function Lab() {
             )}
             {custom && (
               <div className="json-editor">
-                <label htmlFor="trace-json">
-                  Edit events for the selected replay system
-                </label>
+                <label htmlFor="trace-json">Example trace JSON</label>
                 <p>
-                  Use schema version 1 and this example’s operations. Up to 200
-                  events. JSON cannot contain executable code.
+                  Use the selected system’s operations and schema version 1.
+                  Maximum 200 events and 256 KB. This editor accepts event data;
+                  custom replay code runs through Python or the CLI.
                 </p>
                 <textarea
                   id="trace-json"
@@ -613,34 +693,46 @@ export default function Lab() {
                 </Link>
               </div>
             )}
-            <div className="score-row">
-              <div className="score">
-                <span>{report.original.events.length}</span>
-                <ArrowRight className="score-arrow" />
-                <strong>{report.reduced.events.length}</strong>
-                <span className="score-unit">events</span>
+            <dl className="result-metrics" aria-label="Reduction measurements">
+              <div>
+                <dt>Original</dt>
+                <dd data-testid="original-count">
+                  {report.original.events.length}
+                  <span>events</span>
+                </dd>
               </div>
-              <div className="reduction-metric">
-                <span className="reduction-value">−{percent}%</span>
-                <span>events removed.</span>
+              <div>
+                <dt>Reduced</dt>
+                <dd>
+                  {report.reduced.events.length}
+                  <span>events</span>
+                </dd>
               </div>
-            </div>
-            <div className="summary-strip">
-              <span
-                className={report.confirmed ? 'signal-good' : 'signal-warn'}
-              >
-                <CheckCheck size={15} />
-                {report.confirmed
-                  ? 'Same failure confirmed'
-                  : 'Final replay incomplete'}
-              </span>
+              <div>
+                <dt>Removed</dt>
+                <dd>
+                  {removed}
+                  <span>events</span>
+                </dd>
+              </div>
+              <div>
+                <dt>Replayed</dt>
+                <dd>
+                  {report.oracle_calls}
+                  <span>calls</span>
+                </dd>
+              </div>
+            </dl>
+            <div
+              className={`summary-strip ${report.status === 'complete' && report.one_minimal ? 'signal-good' : 'signal-warn'}`}
+            >
               <span>
-                <Terminal size={14} />
-                {report.oracle_calls} calls
-              </span>
-              <span>
-                <GitBranch size={14} />
-                {report.cache_hits} cache hits
+                {report.status === 'complete' && report.one_minimal ? (
+                  <CheckCheck size={16} />
+                ) : (
+                  <FlaskConical size={16} />
+                )}
+                {resultStatus(report)}
               </span>
             </div>
             <Tabs
@@ -658,7 +750,7 @@ export default function Lab() {
                   }
                   value="trace"
                 >
-                  The trace
+                  Trace comparison
                 </TabsTrigger>
                 <TabsTrigger
                   id="casecrop-tab-experiments"
@@ -669,7 +761,7 @@ export default function Lab() {
                   }
                   value="experiments"
                 >
-                  Experiments{' '}
+                  Replay log{' '}
                   <span className="tab-count">{report.trials.length}</span>
                 </TabsTrigger>
                 <TabsTrigger
@@ -679,7 +771,7 @@ export default function Lab() {
                   }
                   value="fix"
                 >
-                  The golden fix
+                  Reference fix
                 </TabsTrigger>
               </TabsList>
               <TabsContent
@@ -687,11 +779,14 @@ export default function Lab() {
                 aria-labelledby="casecrop-tab-trace"
                 value="trace"
               >
+                <p className="inspection-hint">
+                  Select an event to inspect its payload and prerequisites.
+                </p>
                 <div className="trace-comparison">
                   <div className="trace-column original">
                     <div className="column-label">
                       <span>
-                        BEFORE{' '}
+                        Original trace{' '}
                         <span className="muted-number">
                           / {report.original.events.length}
                         </span>
@@ -705,55 +800,53 @@ export default function Lab() {
                       events={report.original.events}
                       kept={kept}
                       selected={selected}
-                      onSelect={setSelected}
+                      onSelect={inspectEvent}
                       compact
                     />
                   </div>
                   <div className="trace-column reduced">
                     <div className="column-label">
                       <span>
-                        AFTER{' '}
+                        Reduced trace{' '}
                         <span className="muted-number">
                           / {report.reduced.events.length}
                         </span>
                       </span>
                       <span className="target-pill">
                         {report.one_minimal
-                          ? '1-MINIMAL'
-                          : report.status.toUpperCase().replaceAll('_', ' ')}
+                          ? 'Audit complete'
+                          : report.status.replaceAll('_', ' ')}
                       </span>
                     </div>
                     <EventRows
                       events={report.reduced.events}
                       selected={selected}
-                      onSelect={setSelected}
+                      onSelect={inspectEvent}
                     />
                     <div className="bug-survives">
-                      <span className="bug-icon">
-                        <Check size={17} />
-                      </span>
-                      <div>
-                        <strong>
-                          {report.confirmed
-                            ? 'Still beautifully broken.'
-                            : 'A smaller candidate.'}
-                        </strong>
-                        <p>{report.signature}</p>
-                      </div>
+                      <span className="field-label">Target failure</span>
+                      <code>{report.signature}</code>
                     </div>
                     <p className="minimal-note">
                       {report.one_minimal
-                        ? 'Every permitted single-event deletion was tested. None kept this failure.'
-                        : 'Minimality is not verified. Increase the budget or inspect unresolved trials.'}
+                        ? 'Every permitted event deletion, including its dependent events, was tested. None preserved the failure. This is closure 1-minimality; a smaller trace may exist.'
+                        : report.status === 'unstable'
+                          ? 'The final replay did not reproduce the target. Review the replay log before using this trace as a regression.'
+                          : 'Verification is incomplete. Review the replay log before using this case as a verified regression.'}
                     </p>
                   </div>
                 </div>
                 {selectedEvent && (
-                  <div className="event-inspector">
+                  <section
+                    className="event-inspector"
+                    ref={inspectorRef}
+                    tabIndex={-1}
+                    aria-label={`Event ${selectedEvent.id}`}
+                  >
                     <div className="field-row">
                       <strong>{selectedEvent.id}</strong>
                       <button
-                        onClick={() => setSelected(null)}
+                        onClick={closeInspector}
                         aria-label="Close event inspector"
                       >
                         <X size={16} />
@@ -764,8 +857,11 @@ export default function Lab() {
                       · {kept.has(selectedEvent.id) ? 'retained' : 'removed'}
                       {selectedEvent.pinned ? ' · pinned' : ''}
                     </p>
-                    <pre>{JSON.stringify(selectedEvent.payload, null, 2)}</pre>
-                  </div>
+                    {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Long payloads require keyboard scrolling. */}
+                    <pre tabIndex={0} aria-label="Event payload">
+                      {JSON.stringify(selectedEvent.payload, null, 2)}
+                    </pre>
+                  </section>
                 )}
               </TabsContent>
               <TabsContent
@@ -775,12 +871,16 @@ export default function Lab() {
               >
                 <div className="experiments">
                   <div className="field-row">
-                    <h3>Every trial, accounted for.</h3>
+                    <h3>Replay history</h3>
                     <span className="mono">
                       {trialIndex + 1} / {report.trials.length}
                     </span>
                   </div>
-                  <p>Select a bar to inspect the candidate and its verdict.</p>
+                  <p>
+                    Each bar is one candidate, ordered by trial number. Height
+                    shows its event count. Select a bar or use Previous and Next
+                    to inspect the replay.
+                  </p>
                   <div className="trial-chart" aria-label="Reduction trials">
                     {report.trials.map((t, i) => (
                       <button
@@ -808,6 +908,34 @@ export default function Lab() {
                       <i className="unknown-dot" />
                       Unresolved
                     </span>
+                  </div>
+                  <div
+                    className="trial-navigation"
+                    aria-label="Navigate replay trials"
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTrialIndex((i) => Math.max(0, i - 1))}
+                      disabled={trialIndex === 0}
+                    >
+                      <ChevronLeft size={14} /> Previous trial
+                    </Button>
+                    <span className="mono">
+                      {trialIndex + 1} of {report.trials.length}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setTrialIndex((i) =>
+                          Math.min(report.trials.length - 1, i + 1),
+                        )
+                      }
+                      disabled={trialIndex === report.trials.length - 1}
+                    >
+                      Next trial <ChevronRight size={14} />
+                    </Button>
                   </div>
                   <div className="trial-detail">
                     <div className="field-row">
@@ -858,29 +986,38 @@ export default function Lab() {
                 <div className="golden-fix">
                   <span className="eyebrow">
                     <ShieldCheck size={14} />
-                    {report.fixed_outcome.verdict === 'pass'
-                      ? 'VERIFIED REFERENCE SOLUTION'
-                      : 'REFERENCE CONTROL INCOMPLETE'}
+                    Reference implementation
                   </span>
                   <h3>
                     {report.fixed_outcome.verdict === 'pass'
-                      ? `${c.tag}. Restored.`
-                      : 'The corrected control needs attention.'}
+                      ? 'The reference fix passes this trace.'
+                      : report.fixed_outcome.verdict === 'fail'
+                        ? 'The reference implementation still fails this trace.'
+                        : 'The reference replay is unresolved.'}
                   </h3>
-                  <p>{c.reason}</p>
+                  <p>{resultCase.reason}</p>
                   {/* oxlint-disable jsx-a11y/no-noninteractive-tabindex -- Overflowing content must support keyboard scrolling. */}
                   <section
                     className="code-diff"
                     aria-label="Reference code changes"
                     tabIndex={0}
                   >
-                    <pre className="deleted">− {c.before}</pre>
-                    <pre className="added">+ {c.after}</pre>
+                    <pre className="deleted">− {resultCase.before}</pre>
+                    <pre className="added">+ {resultCase.after}</pre>
                   </section>
                   {/* oxlint-enable jsx-a11y/no-noninteractive-tabindex */}
                   <div className="control-row">
-                    <span>Buggy implementation</span>
-                    <span className="verdict fail">{report.signature}</span>
+                    <span>Final replay of buggy implementation</span>
+                    <span
+                      className={`verdict ${finalReplay?.outcome.verdict ?? 'unresolved'}`}
+                    >
+                      {finalReplay
+                        ? finalReplay.outcome.verdict.toUpperCase()
+                        : 'NOT RUN'}
+                      {finalReplay?.outcome.verdict === 'fail'
+                        ? ` · ${finalReplay.outcome.signature}`
+                        : ''}
+                    </span>
                   </div>
                   <div className="control-row">
                     <span>Corrected implementation</span>
@@ -892,8 +1029,11 @@ export default function Lab() {
                     <p className="signal-warn">{report.fixed_outcome.reason}</p>
                   )}
                   <p className="field-hint">
-                    Both controls replay the same reduced trace. These are
-                    executable systems, not LLM judgements.
+                    The reference check uses the reduced trace. Final
+                    confirmation of the buggy implementation is recorded
+                    separately and requires remaining replay budget. A passing
+                    reference result applies to this case; it does not prove the
+                    fix handles every possible input.
                   </p>
                   <Link
                     className="text-action"
@@ -910,8 +1050,8 @@ export default function Lab() {
               <span>
                 <ShieldCheck size={15} />
                 {report.one_minimal
-                  ? 'Closure deletion audit passed'
-                  : `Status: ${report.status.replaceAll('_', ' ')}`}
+                  ? `${report.cache_hits} cached observations reused`
+                  : `Result: ${report.status.replaceAll('_', ' ')}`}
               </span>
               <div className="export-actions">
                 <Button
@@ -919,7 +1059,7 @@ export default function Lab() {
                   onClick={() => download('reduced.json', report.reduced_json)}
                 >
                   <FileJson size={14} />
-                  Trace
+                  Download trace
                 </Button>
                 <Button
                   variant="ghost"
@@ -928,7 +1068,7 @@ export default function Lab() {
                   }
                 >
                   <ArrowDownToLine size={14} />
-                  Evidence
+                  Download report
                 </Button>
               </div>
             </div>
@@ -939,15 +1079,12 @@ export default function Lab() {
           aria-label="Use CaseCrop in Python"
         >
           <div className="developer-copy">
-            <span className="eyebrow">SMALL LIBRARY. SHORTER INCIDENTS.</span>
-            <h2>
-              Your replay function.
-              <br />
-              <span>Our delete key.</span>
-            </h2>
+            <span className="eyebrow">Python integration</span>
+            <h2>Reduce traces from your own system.</h2>
             <p>
-              Bring a recorded execution and a function that reproduces the bug.
-              CaseCrop handles the experiments, prerequisites, and evidence.
+              Implement a replay function that resets application state and
+              checks for a specific failure. CaseCrop handles candidate
+              deletion, prerequisite validation, and the audit report.
             </p>
             <div className="library-facts">
               <span>
@@ -985,7 +1122,7 @@ export default function Lab() {
             </pre>
             <div className="install-row">
               <Terminal size={15} />
-              <code>Install from the tagged GitHub release</code>
+              <code>{install}</code>
               <button
                 aria-label="Copy install command"
                 onClick={() => copy(install)}
@@ -995,51 +1132,13 @@ export default function Lab() {
             </div>
           </div>
         </section>
-        <section className="how-section" aria-label="How reduction works">
-          <div>
-            <span className="step-number">01</span>
-            <h3>Keep the setup.</h3>
-            <p>
-              Deleting a prerequisite also deletes its dependents. Pinned setup
-              stays protected.
-            </p>
-          </div>
-          <div>
-            <span className="step-number">02</span>
-            <h3>Keep the failure.</h3>
-            <p>
-              Only the same failure signature earns a smaller trace. Different
-              crashes are unresolved.
-            </p>
-          </div>
-          <div>
-            <span className="step-number">03</span>
-            <h3>Keep the evidence.</h3>
-            <p>
-              Export the reduced input and every trial. Verify it against your
-              corrected implementation.
-            </p>
-          </div>
-        </section>
-        <div className="honest-note">
-          <GitBranch size={17} />
-          <p>
-            <strong>A smaller reproducer, not a claim of root cause.</strong>{' '}
-            “1-minimal” means no permitted single deletion keeps the failure. It
-            does not mean globally shortest. Results depend on a deterministic
-            replay function.
-          </p>
-          <Link href="/docs#guarantees">
-            The guarantees <ArrowUpRight size={14} />
-          </Link>
-        </div>
       </main>
       <footer className="site-footer">
         <Link className="brand footer-brand" href="/">
           <Crop size={19} />
           casecrop
         </Link>
-        <span>Made for the bug that got away.</span>
+        <span>Python trace reduction · MIT license</span>
         <div>
           <Link href="https://github.com/shi1720">By Shivam Gupta</Link>
           <Link href="https://github.com/shi1720/casecrop/blob/main/LICENSE">
@@ -1053,7 +1152,9 @@ export default function Lab() {
           >
             Licenses
           </Link>
-          <span className="beta">BETA</span>
+          <Link href="https://github.com/shi1720/casecrop/releases/tag/v0.1.1">
+            v0.1.1 · beta
+          </Link>
         </div>
       </footer>
       {toast && (

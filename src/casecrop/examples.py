@@ -9,21 +9,21 @@ from .reducer import Result, minimize
 
 CASES = {
     "cache": {
-        "title": "The cache that forgot who you are",
+        "title": "Cross-tenant cache leak",
         "signature": "cache.cross_tenant",
         "description": "Two tenants. One resource ID. A cache key missing its tenant.",
         "fix": "Include the tenant ID in every cache key.",
     },
     "counter": {
-        "title": "Two workers. One missing update.",
+        "title": "Lost update in a counter",
         "signature": "counter.lost_update",
         "description": "Both workers read 0. Both write 1. Two increments become one.",
         "fix": "Apply an atomic increment instead of writing a stale snapshot.",
     },
     "permission": {
-        "title": "The permission that wouldn't leave",
+        "title": "Stale permission cache",
         "signature": "auth.stale_allow",
-        "description": "Access was revoked. The cached permission didn't get the memo.",
+        "description": "A cached allow decision remains valid after access is revoked.",
         "fix": "Invalidate the permission cache when grants change.",
     },
 }
@@ -234,11 +234,25 @@ def browser_run(request_json: str) -> str:
         browser_numbers(trace.to_dict())
     if trace is not None and len(trace.events) > 200:
         raise ValueError("browser traces are limited to 200 events; use Python for larger traces")
+
+    def browser_json(value: Trace) -> str:
+        # Keep Unicode intact so UTF-8 exports use the same byte limit as imports.
+        return json.dumps(value.to_dict(), ensure_ascii=False, separators=(",", ":"))
+
+    if trace is not None:
+        try:
+            normalized_bytes = len(browser_json(trace).encode("utf-8"))
+        except UnicodeError as error:
+            raise ValueError("browser traces must contain valid Unicode characters") from error
+        if normalized_bytes > 256_000:
+            raise ValueError(
+                "normalized browser trace exceeds 256 KB; use Python for larger traces"
+            )
     result = demo(
         case, noise=request.get("noise", 30), max_calls=budget, repeats=repeats, trace=trace
     )
     value = result.to_dict()
     value["fixed_outcome"] = replay(case, result.reduced.events, fixed=True).to_dict()
-    value["reduced_json"] = result.reduced.to_json()
-    value["original_json"] = result.original.to_json()
+    value["reduced_json"] = browser_json(result.reduced)
+    value["original_json"] = browser_json(result.original)
     return json.dumps(value)

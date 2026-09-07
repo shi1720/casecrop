@@ -19,6 +19,7 @@ npm run lint
 npm run test:engine
 npm run build
 npm run test:e2e
+CASECROP_TEST_PRODUCTION=1 npm run test:e2e -- --grep 'executes Python|keyboard operation'
 ```
 
 Use Python 3.10+ and Node 22.13+. Browser tests need Playwright Chromium (`npx playwright install chromium`). Generated engine sources and example reports are tracked; regenerate them after Python changes. CI checks that they match source. The Pyodide runtime is copied unchanged from the pinned npm package before build and is not committed.

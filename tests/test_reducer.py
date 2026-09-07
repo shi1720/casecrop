@@ -194,3 +194,8 @@ def test_long_chain_has_no_recursion():
     trace = Trace(Event(str(i), requires=[str(i - 1)] if i else []) for i in range(1500))
     r = minimize(trace, lambda e: Outcome.fail("x") if e else Outcome.pass_(), max_calls=100)
     assert r.one_minimal and r.reduced.ids == ("0",)
+
+
+def test_baseline_error_preserves_actionable_reason():
+    with pytest.raises(BaselineError, match="command timed out"):
+        minimize(Trace([Event("one", {})]), lambda _: Outcome.unresolved("command timed out"))

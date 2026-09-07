@@ -57,7 +57,7 @@ Runs synchronously. The oracle must reset replay state on every invocation. Exce
 
 `signature` optionally pins the target instead of learning it from baseline. `oracle_id` is caller-supplied provenance metadata up to 200 characters. No persistent cache spans oracle IDs or runs.
 
-Raises `BaselineError` if the complete original trace does not consistently reproduce the expected failure. Baseline errors produce no Result. During search, unrelated signatures are unresolved. Stable fail/pass outcomes are cached within the run. Unresolved observations are retried. Final confirmation always bypasses the cache.
+Raises `BaselineError` if the complete original trace does not consistently reproduce the expected failure. The error includes the replay reason when available. Baseline errors produce no Result. During search, unrelated signatures are unresolved. Stable fail/pass outcomes are cached within the run. Unresolved observations are retried. Final confirmation always bypasses the cache.
 
 ## Result
 

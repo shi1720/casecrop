@@ -153,3 +153,36 @@ def test_unresolved_golden_control_is_reported():
     assert r["confirmed"]
     assert r["fixed_outcome"]["verdict"] == "unresolved"
     assert not r["one_minimal"]
+
+
+def test_browser_unicode_export_can_be_reimported():
+    data = make_trace("cache", noise=0).to_dict()
+    data["events"][2]["payload"]["value"] = "😀" * 22_000
+    raw = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    report = json.loads(browser_run(json.dumps({"trace_json": raw})))
+    assert report["confirmed"] and report["one_minimal"]
+    assert len(report["reduced_json"].encode("utf-8")) < 256_000
+    again = json.loads(browser_run(json.dumps({"trace_json": report["reduced_json"]})))
+    assert again["confirmed"] and again["one_minimal"]
+    assert again["reduced"] == report["reduced"]
+
+
+def test_browser_checks_size_after_filling_optional_defaults():
+    data = make_trace("cache", noise=0).to_dict()
+    for event in data["events"]:
+        for key in ("pinned", "cost"):
+            event.pop(key)
+    data["events"][2]["payload"]["value"] = ""
+    raw = json.dumps(data, separators=(",", ":"))
+    data["events"][2]["payload"]["value"] = "x" * (255_990 - len(raw))
+    raw = json.dumps(data, separators=(",", ":"))
+    assert len(raw.encode("utf-8")) < 256_000
+    with pytest.raises(ValueError, match="normalized browser trace"):
+        browser_run(json.dumps({"trace_json": raw}))
+
+
+def test_browser_rejects_unpaired_unicode_surrogates():
+    data = make_trace("cache", noise=0).to_dict()
+    data["events"][2]["payload"]["value"] = "\ud800"
+    with pytest.raises(ValueError, match="valid Unicode"):
+        browser_run(json.dumps({"trace_json": json.dumps(data)}))

@@ -1045,6 +1045,14 @@ export default function Lab() {
           <Link href="https://github.com/shi1720/casecrop/blob/main/LICENSE">
             MIT
           </Link>
+          <Link
+            href="/runtime/THIRD_PARTY_LICENSES.txt"
+            target="_blank"
+            rel="noreferrer"
+            prefetch={false}
+          >
+            Licenses
+          </Link>
           <span className="beta">BETA</span>
         </div>
       </footer>

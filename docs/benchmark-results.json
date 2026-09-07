@@ -1,0 +1,26 @@
+{
+  "python": "3.12.14",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "results": [
+    {
+      "events": 100,
+      "seconds": 0.005226,
+      "oracle_calls": 205
+    },
+    {
+      "events": 200,
+      "seconds": 0.017536,
+      "oracle_calls": 410
+    },
+    {
+      "events": 400,
+      "seconds": 0.070216,
+      "oracle_calls": 820
+    },
+    {
+      "events": 800,
+      "seconds": 0.280268,
+      "oracle_calls": 1640
+    }
+  ]
+}

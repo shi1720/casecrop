@@ -1,0 +1,4 @@
+lib/examples.json linguist-generated=true
+public/engine-sources.json linguist-generated=true
+components/ui/** linguist-vendored=true
+hooks/use-mobile.ts linguist-vendored=true

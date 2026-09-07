@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "casecrop"
+version = "0.1.0"
+description = "Shrink recorded executions into dependency-valid, same-failure regression cases."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "Shivam Gupta"}]
+dependencies = []
+keywords = ["delta-debugging", "agents", "testing", "minimization", "regression"]
+classifiers = ["Development Status :: 4 - Beta", "Programming Language :: Python :: 3", "Typing :: Typed", "Topic :: Software Development :: Testing"]
+
+[project.optional-dependencies]
+test = ["pytest>=8.3,<10", "hypothesis>=6.120,<7", "coverage>=7.6,<8", "ruff>=0.12,<1", "mypy>=1.15,<2", "build>=1.2,<2"]
+
+[project.scripts]
+casecrop = "casecrop.cli:main"
+
+[project.urls]
+Homepage = "https://casecrop-shi1720.sg127977958.chatgpt.site"
+Repository = "https://github.com/shi1720/casecrop"
+Documentation = "https://github.com/shi1720/casecrop/tree/main/docs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/casecrop"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+files = ["src/casecrop"]

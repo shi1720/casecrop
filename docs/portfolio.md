@@ -6,7 +6,7 @@
 
 ## A two-minute demo
 
-1. Open the [workbench](https://casecrop-shi1720.sg127977958.chatgpt.site). The initial result is explicitly labeled as a previously executed example.
+1. Open the [workbench](https://casecrop.web.app). The initial result is explicitly labeled as a previously executed example.
 2. Pick **Cross-tenant cache leak**, then **Run reduction**. Actual Python runs locally, shrinking 36 events to 6.
 3. Inspect `store-a` and its prerequisite. The reducer preserved setup instead of turning a missing tenant into a false success.
 4. Open **Replay log**. Every candidate, verdict, cached result, and final deletion witness is inspectable.

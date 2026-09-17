@@ -51,3 +51,7 @@ __pycache__/
 /test-results/
 /playwright-report/
 /artifacts/
+
+# Firebase local cache
+/.firebase/
+firebase-debug.log*

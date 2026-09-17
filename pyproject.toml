@@ -21,7 +21,7 @@ test = ["pytest>=8.3,<10", "hypothesis>=6.120,<7", "coverage>=7.6,<8", "ruff>=0.
 casecrop = "casecrop.cli:main"
 
 [project.urls]
-Homepage = "https://casecrop-shi1720.sg127977958.chatgpt.site"
+Homepage = "https://casecrop.web.app"
 Repository = "https://github.com/shi1720/casecrop"
 Documentation = "https://github.com/shi1720/casecrop/tree/main/docs"
 

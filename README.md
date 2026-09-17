@@ -6,12 +6,12 @@ CaseCrop is a Python library for engineers who already have a failing trace and 
 
 Use it after an agent workflow, stateful test, or API sequence fails. The output is a smaller input to debug, plus a report explaining which candidates were tried and what each replay returned.
 
-[Workbench](https://casecrop-shi1720.sg127977958.chatgpt.site) · [Quickstart](https://casecrop-shi1720.sg127977958.chatgpt.site/docs) · [API reference](docs/reference.md) · [Architecture](docs/architecture.md)
+[Workbench](https://casecrop.web.app) · [Quickstart](https://casecrop.web.app/docs) · [API reference](docs/reference.md) · [Architecture](docs/architecture.md)
 
 [![CI](https://github.com/shi1720/casecrop/actions/workflows/ci.yml/badge.svg)](https://github.com/shi1720/casecrop/actions/workflows/ci.yml)
 [![MIT license](https://img.shields.io/badge/license-MIT-425978)](LICENSE)
 
-[![CaseCrop workbench showing a 36-event cache failure reduced to six events, with stable event IDs and replay evidence](docs/assets/lab.png)](https://casecrop-shi1720.sg127977958.chatgpt.site)
+[![CaseCrop workbench showing a 36-event cache failure reduced to six events, with stable event IDs and replay evidence](docs/assets/lab.png)](https://casecrop.web.app)
 
 ## Install and run
 
@@ -37,7 +37,7 @@ python -m pytest incident/test_regression.py
 
 Use a fresh output directory for another run; existing artifacts are protected.
 
-The [browser workbench](https://casecrop-shi1720.sg127977958.chatgpt.site) runs the same Python source locally through Pyodide. Select one of three bundled replay systems, choose **Run reduction**, inspect the trace or replay log, and download the result. Initial results are labeled **Saved example result**. Edited browser JSON must use the selected system's operations; connect your own application through the Python API or CLI.
+The [browser workbench](https://casecrop.web.app) runs the same Python source locally through Pyodide. Select one of three bundled replay systems, choose **Run reduction**, inspect the trace or replay log, and download the result. Initial results are labeled **Saved example result**. Edited browser JSON must use the selected system's operations; connect your own application through the Python API or CLI.
 
 ## Connect a replay function
 
@@ -174,3 +174,7 @@ Parallel search, async callbacks, persistent checkpoints, weighted-cost optimiza
 A useful contribution starts with a failing trace, a replay function, and a corrected control. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and review requirements. The project is [MIT licensed](LICENSE).
 
 Created by [Shivam Gupta](https://github.com/shi1720), with AI-assisted development and separate implementation and product reviews. The [engineering walkthrough](docs/portfolio.md) explains the use case, design decisions, and relevance to coding-agent evaluation environments.
+
+## Firebase Hosting
+
+The public website is deployed as a static export on Firebase Hosting. See [build, local preview and deployment](docs/firebase-hosting.md).
